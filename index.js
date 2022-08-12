@@ -18,6 +18,8 @@ async function run() {
     try {
         await client.connect();
         const productCollection = client.db('cosmetic').collection('products');
+        const blogCollection = client.db('cosmetic').collection('blog');
+        const commentsCollection = client.db('cosmetic').collection('comments');
 
         app.get('/products', async (req, res) => {
             const query = {};
@@ -30,6 +32,28 @@ async function run() {
             const result = await productCollection.findOne(query)
             res.send(result)
           })
+        app.get('/blog',async(req,res)=>{
+            const query={};
+            const result=await blogCollection.find(query).toArray();
+            res.send(result)
+        })
+        app.get('/blog/:id',async(req,res)=>{
+           const id=req.params.id;
+           const query={_id:ObjectId(id)};
+           const result=await blogCollection.findOne(query);
+           res.send(result)
+        })
+
+        app.get('/comments',async(req,res)=>{
+            const query={};
+            const result=await commentsCollection.find(query).toArray();
+            res.send(result)
+        })
+        app.post('/comments',async(req,res)=>{
+            const query=req.body;
+            const result= await commentsCollection.insertOne(query);
+            res.send(result)
+        })
 
 
     } finally {

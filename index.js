@@ -20,7 +20,13 @@ async function run() {
         const productCollection = client.db('cosmetic').collection('products');
         const blogCollection = client.db('cosmetic').collection('blog');
         const commentsCollection = client.db('cosmetic').collection('comments');
+        const orderCollection = client.db('cosmetic').collection('order');
 
+        app.post('/products', async (req, res) => {
+            const query = req.body;
+            const result = await productCollection.insertOne(query);
+            res.send(result)
+          })
         app.get('/products', async (req, res) => {
             const query = {};
             const result = await productCollection.find(query).toArray();
@@ -32,6 +38,11 @@ async function run() {
             const result = await productCollection.findOne(query)
             res.send(result)
           })
+        app.post('/blog',async(req,res)=>{
+            const query=req.body;
+            const result=await blogCollection.insertOne(query);
+            res.send(result)
+        })
         app.get('/blog',async(req,res)=>{
             const query={};
             const result=await blogCollection.find(query).toArray();
@@ -52,6 +63,17 @@ async function run() {
         app.post('/comments',async(req,res)=>{
             const query=req.body;
             const result= await commentsCollection.insertOne(query);
+            res.send(result)
+        })
+        app.get('/order',async(req,res)=>{
+            const email=req.query.email;
+            const query={email:email};
+            const result=await orderCollection.find(query).toArray();
+            res.send(result)
+        })
+        app.post('/order',async(req,res)=>{
+            const query=req.body;
+            const result= await orderCollection.insertOne(query);
             res.send(result)
         })
 

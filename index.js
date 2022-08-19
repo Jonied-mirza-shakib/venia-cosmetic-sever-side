@@ -4,6 +4,7 @@ const port = process.env.PORT || 5000
 const cors = require('cors')
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const jwt = require('jsonwebtoken');
 app.use(express.json())
 app.use(cors())
 
@@ -13,6 +14,21 @@ app.use(cors())
 
 const uri = `mongodb+srv://${process.env.ACCESS_USER_NAME}:${process.env.ACCESS_PASSWORD}@cluster0.oo1mtbb.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
+
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).send({ message: 'UnAuthorized access' })
+    }
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
+        if (err) {
+            return res.status(403).send({ message: 'Forbidden access' });
+        }
+        req.decoded = decoded;
+        next()
+    });
+}
 
 async function run() {
     try {
@@ -38,7 +54,8 @@ async function run() {
                 $set: user,
             };
             const result = await usersCollection.updateOne(filter, updateDoc, options);
-            res.send(result)
+            var token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+            res.send({ result, token })
         })
 
 
@@ -55,7 +72,6 @@ async function run() {
             const result = await productCollection.findOne(query)
             res.send(result)
         })
-
         app.put('/products/:id', async (req, res) => {
             const id = req.params.id;
             const updateProduct = req.body;
@@ -71,6 +87,14 @@ async function run() {
             const result = await productCollection.updateOne(filter, updateDoc, options);
             res.send(result)
         })
+
+        app.delete('/products/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const result = await productCollection.deleteOne(query);
+            res.send(result)
+        })
+
         app.post('/blog', async (req, res) => {
             const query = req.body;
             const result = await blogCollection.insertOne(query);
@@ -87,6 +111,28 @@ async function run() {
             const result = await blogCollection.findOne(query);
             res.send(result)
         })
+        app.put('/blog/:id', async (req, res) => {
+            const id = req.params.id;
+            const updateBlog = req.body;
+            const filter = { _id: ObjectId(id) };
+            const options = { upsert: true };
+            const updateDoc = {
+                $set: {
+                    name: updateBlog.name,
+                    price: updateBlog.price,
+                    img: updateBlog.img
+                },
+            };
+            const result = await blogCollection.updateOne(filter, updateDoc, options);
+            res.send(result);
+        })
+
+        app.delete('/blog/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const result = await blogCollection.deleteOne(query);
+            res.send(result)
+        })
 
         app.get('/comments', async (req, res) => {
             const query = {};
@@ -98,11 +144,17 @@ async function run() {
             const result = await commentsCollection.insertOne(query);
             res.send(result)
         })
-        app.get('/order', async (req, res) => {
+        app.get('/order', verifyJWT, async (req, res) => {
             const email = req.query.email;
-            const query = { email: email };
-            const result = await orderCollection.find(query).toArray();
-            res.send(result)
+            const decodedEmail = req.decoded.email;
+            if (email === decodedEmail) {
+                const query = { email: email };
+                const result = await orderCollection.find(query).toArray();
+                return res.send(result)
+            } else {
+                return res.status(403).send({ message: 'Forbidden access' });
+            }
+
         })
         app.post('/order', async (req, res) => {
             const query = req.body;

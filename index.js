@@ -5,6 +5,7 @@ const cors = require('cors')
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 app.use(express.json())
 app.use(cors())
 
@@ -37,6 +38,7 @@ async function run() {
         const blogCollection = client.db('cosmetic').collection('blog');
         const commentsCollection = client.db('cosmetic').collection('comments');
         const orderCollection = client.db('cosmetic').collection('order');
+        const paymentCollection = client.db('cosmetic').collection('payment');
         const usersCollection = client.db('cosmetic').collection('users');
 
         app.post('/products', async (req, res) => {
@@ -45,32 +47,61 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/user', async(req,res)=>{
-            const user=await usersCollection.find().toArray();
-            res.send(user)
+        app.post("/create-payment-intent", async (req, res) => {
+            const body = req.body;
+            const price = body.total;
+            const amount = price * 100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ['card'],
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
         })
-        app.get('/admin/:email', async(req,res)=>{
-            const email=req.params.email;
-            const user =await usersCollection.findOne({email:email});
-            const isAdmin=user.role==='admin';
-            res.send({admin: isAdmin})
+        app.patch('/order/:id', async (req, res) => {
+            const id = req.params.id;
+            const payment=req.body;
+            const filter = { _id: ObjectId(id) };
+            const updateDoc = {
+                $set: {
+                    paid:true,
+                    transactionId: payment.transactionId
+                },
+            };
+            const payments=await paymentCollection.insertOne(payment)
+            const updatePayment=await orderCollection.updateOne(filter,updateDoc)
+            
+            res.send(updatePayment)
         })
 
-        app.put('/user/admin/:email',verifyJWT, async (req, res) => {
+        app.get('/user', async (req, res) => {
+            const user = await usersCollection.find().toArray();
+            res.send(user)
+        })
+        app.get('/admin/:email', async (req, res) => {
             const email = req.params.email;
-            const requester=req.decoded.email;
-            const requesterAccount= await usersCollection.findOne({email: requester});
-            if(requesterAccount.role==='admin'){
+            const user = await usersCollection.findOne({ email: email });
+            const isAdmin = user.role === 'admin';
+            res.send({ admin: isAdmin })
+        })
+
+        app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email;
+            const requester = req.decoded.email;
+            const requesterAccount = await usersCollection.findOne({ email: requester });
+            if (requesterAccount.role === 'admin') {
                 const filter = { email: email };
                 const updateDoc = {
-                    $set: {role:'admin'},
+                    $set: { role: 'admin' },
                 };
                 const result = await usersCollection.updateOne(filter, updateDoc);
                 res.send(result)
-            }else{
-                res.status(403).send({message:'Forbidden access'})
+            } else {
+                res.status(403).send({ message: 'Forbidden access' })
             }
-          
+
         })
         app.put('/user/:email', async (req, res) => {
             const email = req.params.email;
@@ -84,7 +115,7 @@ async function run() {
             var token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
             res.send({ result, token })
         })
-        app.get('/products',verifyJWT, async (req, res) => {
+        app.get('/products', async (req, res) => {
             const query = {};
             const result = await productCollection.find(query).toArray();
             res.send(result)
@@ -179,6 +210,14 @@ async function run() {
             }
 
         })
+
+        app.get('/order/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const result = await orderCollection.findOne(query);
+            res.send(result)
+        })
+
         app.post('/order', async (req, res) => {
             const query = req.body;
             const result = await orderCollection.insertOne(query);

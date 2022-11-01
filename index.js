@@ -220,7 +220,15 @@ async function run() {
 
         app.post('/order', async (req, res) => {
             const query = req.body;
+            console.log(query)
             const result = await orderCollection.insertOne(query);
+            res.send(result)
+        })
+
+        app.delete('/order/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const result = await orderCollection.deleteOne(query);
             res.send(result)
         })
 
